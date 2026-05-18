@@ -58,6 +58,9 @@ llm = ChatOpenAI(model="Qwen3.5-122B-A10B",
 def planner(state: AgentState) -> AgentState:
     prompt = """你是一个编程助手，需要解决以下问题。
 请用中文简要说明你将如何分步骤完成这个任务（仅输出计划，不要写代码）。
+
+注意：如果用户只是打招呼（如"你好"、"hi"等），不需要写代码，只需说明会礼貌回应即可。
+
 问题：{input}
 计划："""
     user_msg = state["messages"][-1].content
@@ -102,7 +105,6 @@ def reflector(state: AgentState) -> AgentState:
     """分析执行结果，判断是否需要修正"""
     error = state.get("error", "")
     output = state.get("output", "")
-    variables = state.get("variables", {})
 
     feedback = ""
     needs_fix = False
@@ -110,9 +112,15 @@ def reflector(state: AgentState) -> AgentState:
     if error:
         needs_fix = True
         feedback = f"代码出错：{error}"
-    elif not output and not variables:
-        needs_fix = True
-        feedback = "代码未产生任何输出，请检查是否有 print() 语句或返回值得到输出"
+    elif not output.strip():
+        # 检查代码是否包含 input() - 这是不合适的，因为程序已经在等待输入
+        code = state.get("code", "")
+        if "input(" in code:
+            needs_fix = True
+            feedback = "代码使用了 input() 函数，这会导致程序阻塞。请直接使用 print() 输出结果，不要等待用户输入。"
+        else:
+            needs_fix = True
+            feedback = "代码未产生任何输出，请检查是否有 print() 语句"
     else:
         feedback = "执行成功"
 
